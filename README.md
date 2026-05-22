@@ -21,7 +21,7 @@ Local-first MVP for collecting authorized Palestine-related text signals and rev
 3. Open the dashboard at `http://127.0.0.1:5173`.
 4. API docs are available at `http://127.0.0.1:18000/docs`.
 
-The worker queues scheduled `ingest`, `discover`, and `retention` runs every six hours by default. The dashboard can queue manual collection, discovery, and retention runs.
+The worker queues scheduled `ingest`, `discover`, and `retention` runs every 60 minutes by default. The dashboard can queue manual collection, discovery, and retention runs.
 PostgreSQL is exposed to the host on `127.0.0.1:55432` and the API on `127.0.0.1:18000` by default so the stack does not collide with common local Postgres or API ports.
 
 ## Source setup
@@ -38,7 +38,7 @@ Add approved public or joined Telegram channels/groups by username, chat ID, or 
 
 ### Discord
 
-Discord uses a bot token. Add whitelisted channel IDs as Discord sources after the bot has access to those channels and message history. Missing permissions become connector health states instead of hidden failures.
+Discord uses a bot token. Add whitelisted text-channel IDs as Discord sources after the bot has access to those channels and message history. A full channel URL such as `https://discord.com/channels/<server-id>/<channel-id>` is also accepted. Server URLs and `@home` URLs do not identify a collectable channel. Missing permissions become connector health states instead of hidden failures.
 
 ### Facebook
 

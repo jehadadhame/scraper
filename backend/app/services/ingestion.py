@@ -110,17 +110,17 @@ async def ingest_sources(session: Session) -> tuple[int, int]:
 async def discover_sources(session: Session) -> int:
     connectors = build_connectors()
     discovered_count = 0
+    seen_candidates: set[tuple[str, str]] = set()
     for platform in ("telegram", "news"):
         connector = connectors[platform]
-        try:
-            for candidate in await connector.discover_candidates():
-                if save_candidate(session, candidate):
-                    discovered_count += 1
-            session.commit()
-        except ConnectorError:
-            session.rollback()
-        except Exception:
-            session.rollback()
+        for candidate in await connector.discover_candidates():
+            candidate_key = (candidate.platform, candidate.external_id)
+            if candidate_key in seen_candidates:
+                continue
+            seen_candidates.add(candidate_key)
+            if save_candidate(session, candidate):
+                discovered_count += 1
+        session.commit()
     return discovered_count
 
 

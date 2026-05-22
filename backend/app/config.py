@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     api_host: str = "127.0.0.1"
     api_port: int = 8000
     frontend_origin: str = "http://127.0.0.1:5173"
-    schedule_seconds: int = 6 * 60 * 60
+    schedule_seconds: int = 60 * 60
     retention_days: int = 90
     evidence_limit_per_issue: int = 8
 

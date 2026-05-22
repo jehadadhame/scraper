@@ -1,11 +1,13 @@
 from datetime import UTC, datetime
 from typing import Any
+from urllib.parse import urlparse
 
 import httpx
 
 from app.config import get_settings
 from app.connectors.base import (
     CollectedRecord,
+    ConnectorError,
     ConnectorPermissionError,
     ConnectorUnavailable,
     FetchBatch,
@@ -31,11 +33,14 @@ class DiscordConnector:
         self, source: Source, limit: int, after: str | None = None
     ) -> FetchBatch:
         token = get_settings().discord_bot_token
-        channel_id = source.external_id
+        channel_id = discord_channel_id(source.external_id or source.url)
         if not token:
             raise ConnectorUnavailable("DISCORD_BOT_TOKEN is not configured.")
         if not channel_id:
-            raise ConnectorUnavailable("Discord sources need a channel external_id.")
+            raise ConnectorError(
+                "Discord sources need a channel ID or a channel URL like "
+                "https://discord.com/channels/<server-id>/<channel-id>."
+            )
 
         params: dict[str, Any] = {"limit": max(1, min(limit, 100))}
         if after:
@@ -89,3 +94,28 @@ class DiscordConnector:
 def parse_iso_datetime(value: str) -> datetime:
     parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
     return parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)
+
+
+def discord_channel_id(value: str | None) -> str | None:
+    if not value:
+        return None
+
+    target = value.strip()
+    if target.isdigit():
+        return target
+
+    parsed = urlparse(target if "://" in target else f"https://{target}")
+    if parsed.netloc.casefold() not in {
+        "discord.com",
+        "www.discord.com",
+        "discordapp.com",
+        "www.discordapp.com",
+    }:
+        return None
+
+    path_parts = [part for part in parsed.path.split("/") if part]
+    if len(path_parts) >= 3 and path_parts[0] == "channels":
+        guild_or_home, channel_id = path_parts[1], path_parts[2]
+        if guild_or_home != "@me" and channel_id.isdigit():
+            return channel_id
+    return None

@@ -517,12 +517,17 @@ function SourceForm({
       </label>
       <label>
         URL
-        <input value={url} onChange={(event) => setUrl(event.target.value)} placeholder="RSS or public source URL" />
+        <input value={url} onChange={(event) => setUrl(event.target.value)} placeholder={sourceUrlPlaceholder(platform)} />
       </label>
       <label>
         External ID
-        <input value={externalId} onChange={(event) => setExternalId(event.target.value)} placeholder="Telegram username or Discord channel ID" />
+        <input value={externalId} onChange={(event) => setExternalId(event.target.value)} placeholder={sourceExternalIdPlaceholder(platform)} />
       </label>
+      {platform === "discord" ? (
+        <p className="form-note">
+          Use a Discord text channel ID or a channel URL with both server ID and channel ID. Server and @home URLs cannot be collected.
+        </p>
+      ) : null}
       {platform === "facebook" ? (
         <p className="form-note warning">
           Facebook records stay blocked until an approved Meta access path is configured.
@@ -687,6 +692,26 @@ function labelize(value: string) {
 
 function categoryLabel(value: string) {
   return categoryLabels[value] ?? labelize(value);
+}
+
+function sourceUrlPlaceholder(platform: Platform) {
+  if (platform === "discord") {
+    return "https://discord.com/channels/server-id/channel-id";
+  }
+  if (platform === "telegram") {
+    return "https://t.me/channel";
+  }
+  return "RSS or public source URL";
+}
+
+function sourceExternalIdPlaceholder(platform: Platform) {
+  if (platform === "discord") {
+    return "Discord channel ID";
+  }
+  if (platform === "telegram") {
+    return "Telegram username or chat ID";
+  }
+  return "Optional external ID";
 }
 
 function formatDate(value: string) {

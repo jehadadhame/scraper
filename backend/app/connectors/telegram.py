@@ -129,7 +129,7 @@ def telegram_target(value: str | None) -> str | None:
     target = value.strip()
     parsed = urlparse(target if "://" in target else f"https://{target}")
     if parsed.netloc.casefold() not in {"t.me", "telegram.me", "www.t.me", "www.telegram.me"}:
-        return target
+        return None if "://" in target else target
 
     path_parts = [part for part in parsed.path.split("/") if part]
     if path_parts[:1] == ["s"]:
