@@ -3,6 +3,7 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import select
 
 from app.connectors.base import CollectedRecord
+from app.main import issue_read
 from app.models import IssueCluster, IssueEvidence, Source
 from app.services.analysis import attach_item_to_issue
 from app.services.ingestion import expire_evidence, is_recent_content_duplicate, store_item
@@ -50,7 +51,7 @@ def test_dedupes_recent_content_before_issue_attachment(session) -> None:
     assert first_cluster is not None
     assert is_recent_content_duplicate(session, second_item) is True
     assert session.scalar(select(IssueEvidence).where(IssueEvidence.item_id == second_item.id)) is None
-    assert session.scalar(select(IssueCluster)).label == "Health access and medicine"
+    assert session.scalar(select(IssueCluster)).label == "الوصول إلى الرعاية الصحية والدواء"
 
 
 def test_retention_deletes_evidence_text_and_keeps_issue_cluster(session) -> None:
@@ -77,3 +78,22 @@ def test_retention_deletes_evidence_text_and_keeps_issue_cluster(session) -> Non
     assert session.get(IssueCluster, cluster.id) is not None
     assert session.scalar(select(IssueEvidence)) is None
 
+
+def test_issue_read_localizes_stored_topic_metadata() -> None:
+    stored_cluster = IssueCluster(
+        id=4,
+        fingerprint="housing",
+        category="housing",
+        label="Housing and shelter needs",
+        summary="Stored before Arabic topic labels were added.",
+        score=0,
+        recent_count=0,
+        previous_count=0,
+        source_count=0,
+        language_counts={},
+    )
+
+    issue = issue_read(stored_cluster)
+
+    assert issue.label == "احتياجات السكن والمأوى"
+    assert issue.summary.startswith("بلاغات عن المأوى")

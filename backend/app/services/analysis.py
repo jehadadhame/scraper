@@ -24,67 +24,69 @@ TOPICS = (
     IssueTopic(
         "power",
         "services",
-        "Electricity and power access",
-        "Reports about electricity availability, outages, charging, or fuel for power.",
+        "الوصول إلى الكهرباء والطاقة",
+        "بلاغات عن توفر الكهرباء، الانقطاعات، الشحن، أو الوقود اللازم للطاقة.",
         ("electricity", "power cut", "generator", "charging", "كهربا", "كهرباء", "انقطاع"),
     ),
     IssueTopic(
         "water",
         "services",
-        "Water and sanitation access",
-        "Reports about drinking water, sanitation, sewage, or basic water service.",
+        "الوصول إلى المياه والصرف الصحي",
+        "بلاغات عن مياه الشرب، الصرف الصحي، المجاري، أو خدمات المياه الأساسية.",
         ("water", "sanitation", "sewage", "مياه", "ماء", "صرف صحي"),
     ),
     IssueTopic(
         "prices",
         "prices",
-        "Prices and economic pressure",
-        "Reports about prices, affordability, cash, wages, or household economic pressure.",
+        "الأسعار والضغط المعيشي",
+        "بلاغات عن الأسعار، القدرة على الشراء، السيولة، الأجور، أو الضغط الاقتصادي على الأسر.",
         ("price", "prices", "expensive", "afford", "cash", "راتب", "اسعار", "أسعار", "غلاء"),
     ),
     IssueTopic(
         "food",
         "aid_food",
-        "Food supply and aid gaps",
-        "Reports about food access, aid distribution, flour, bread, or hunger.",
+        "نقص الغذاء والمساعدات",
+        "بلاغات عن توفر الغذاء، توزيع المساعدات، الطحين، الخبز، أو الجوع.",
         ("food", "flour", "bread", "aid", "hunger", "طعام", "غذاء", "خبز", "طحين", "مساعد"),
     ),
     IssueTopic(
         "health",
         "health",
-        "Health access and medicine",
-        "Reports about hospitals, medicine, ambulances, treatment, or health access.",
+        "الوصول إلى الرعاية الصحية والدواء",
+        "بلاغات عن المستشفيات، الدواء، الإسعاف، العلاج، أو الوصول إلى الرعاية الصحية.",
         ("hospital", "medicine", "medical", "ambulance", "clinic", "دواء", "مستشفى", "علاج", "اسعاف"),
     ),
     IssueTopic(
         "education",
         "education",
-        "Education disruption",
-        "Reports about schools, universities, exams, or learning access.",
+        "تعطل التعليم",
+        "بلاغات عن المدارس، الجامعات، الامتحانات، أو الوصول إلى التعليم.",
         ("school", "university", "exam", "education", "مدرس", "جامعة", "امتحان", "تعليم"),
     ),
     IssueTopic(
         "mobility",
         "mobility",
-        "Mobility and access barriers",
-        "Reports about roads, checkpoints, transport, crossings, or movement barriers.",
+        "عوائق التنقل والوصول",
+        "بلاغات عن الطرق، الحواجز، المواصلات، المعابر، أو قيود الحركة.",
         ("checkpoint", "crossing", "road", "transport", "mobility", "حاجز", "معبر", "طريق", "مواصل"),
     ),
     IssueTopic(
         "housing",
         "housing",
-        "Housing and shelter needs",
-        "Reports about shelter, tents, homes, rent, displacement housing, or repair needs.",
+        "احتياجات السكن والمأوى",
+        "بلاغات عن المأوى، الخيام، المنازل، الإيجار، سكن النزوح، أو احتياجات الإصلاح.",
         ("shelter", "tent", "housing", "rent", "home", "خيمة", "مأوى", "سكن", "منزل", "ايجار"),
     ),
     IssueTopic(
         "safety",
         "safety",
-        "Safety and urgent protection",
-        "Reports about safety threats, evacuation, attacks, missing people, or urgent protection.",
+        "السلامة والحماية العاجلة",
+        "بلاغات عن التهديدات، الإخلاء، الهجمات، المفقودين، أو الحماية العاجلة.",
         ("unsafe", "evacuat", "attack", "missing", "danger", "خطر", "اخلاء", "إخلاء", "مفقود", "قصف"),
     ),
 )
+
+TOPICS_BY_KEY = {topic.key: topic for topic in TOPICS}
 
 ACTIONABLE_FALLBACK = (
     "problem",
@@ -109,11 +111,23 @@ def match_issue(text: str) -> IssueTopic | None:
         return IssueTopic(
             "other_need",
             "other",
-            "Other actionable need",
-            "Reports that describe an actionable need not yet assigned to a stronger MVP topic.",
+            "احتياجات أخرى قابلة للمعالجة",
+            "بلاغات تصف احتياجا قابلا للمعالجة ولم يصنف بعد ضمن موضوع أقوى في النسخة الأولى.",
             ACTIONABLE_FALLBACK,
         )
     return None
+
+
+def topic_for_key(key: str) -> IssueTopic | None:
+    if key == "other_need":
+        return IssueTopic(
+            "other_need",
+            "other",
+            "احتياجات أخرى قابلة للمعالجة",
+            "بلاغات تصف احتياجا قابلا للمعالجة ولم يصنف بعد ضمن موضوع أقوى في النسخة الأولى.",
+            ACTIONABLE_FALLBACK,
+        )
+    return TOPICS_BY_KEY.get(key)
 
 
 def attach_item_to_issue(session: Session, item: CollectedItem) -> IssueCluster | None:
@@ -133,6 +147,10 @@ def attach_item_to_issue(session: Session, item: CollectedItem) -> IssueCluster 
         )
         session.add(cluster)
         session.flush()
+    else:
+        cluster.category = topic.category
+        cluster.label = topic.label
+        cluster.summary = topic.summary
 
     existing_link = session.scalar(
         select(IssueEvidence.id).where(

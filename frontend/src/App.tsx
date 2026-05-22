@@ -49,6 +49,17 @@ const categories = [
   "safety",
   "other",
 ];
+const categoryLabels: Record<string, string> = {
+  services: "الخدمات",
+  prices: "الأسعار",
+  aid_food: "الغذاء والمساعدات",
+  health: "الصحة",
+  education: "التعليم",
+  mobility: "التنقل",
+  housing: "السكن",
+  safety: "السلامة",
+  other: "أخرى",
+};
 
 export function App() {
   const [view, setView] = useState<View>("issues");
@@ -191,10 +202,10 @@ export function App() {
       <header className="topbar">
         <div className="brand">
           <strong>Palestine Signals</strong>
-          <span>{issues.length} active issue clusters</span>
+          <span>{issues.length} قضايا نشطة</span>
         </div>
         <nav className="tabs" aria-label="Dashboard views">
-          <Tab view={view} value="issues" label="Issues" onSelect={setView} icon={<Activity />} />
+          <Tab view={view} value="issues" label="القضايا" onSelect={setView} icon={<Activity />} />
           <Tab view={view} value="sources" label="Sources" onSelect={setView} icon={<DatabaseZap />} />
           <Tab view={view} value="discovery" label="Review" onSelect={setView} icon={<FileSearch />} />
           <Tab view={view} value="runs" label="Runs" onSelect={setView} icon={<Clock3 />} />
@@ -271,52 +282,52 @@ function IssuesView({
 }) {
   return (
     <section className="workspace issues-workspace">
-      <aside className="filter-rail">
-        <h2><Filter /> Filters</h2>
+      <aside className="filter-rail" dir="rtl">
+        <h2><Filter /> الفلاتر</h2>
         <label>
-          Search
+          بحث
           <input
             value={filters.q}
             onChange={(event) => onFilter({ ...filters, q: event.target.value })}
-            placeholder="water, medicine, price"
+            placeholder="مياه، دواء، أسعار"
           />
         </label>
         <label>
-          Category
+          الفئة
           <select value={filters.category} onChange={(event) => onFilter({ ...filters, category: event.target.value })}>
-            <option value="">All</option>
-            {categories.map((category) => <option key={category} value={category}>{labelize(category)}</option>)}
+            <option value="">الكل</option>
+            {categories.map((category) => <option key={category} value={category}>{categoryLabel(category)}</option>)}
           </select>
         </label>
         <label>
-          Language
+          اللغة
           <select value={filters.language} onChange={(event) => onFilter({ ...filters, language: event.target.value })}>
-            <option value="">All</option>
-            <option value="ar">Arabic</option>
-            <option value="en">English</option>
+            <option value="">الكل</option>
+            <option value="ar">العربية</option>
+            <option value="en">الإنجليزية</option>
           </select>
         </label>
         <label>
-          Trend
+          الاتجاه
           <select value={filters.trend} onChange={(event) => onFilter({ ...filters, trend: event.target.value })}>
-            <option value="">All</option>
-            <option value="active">Active</option>
-            <option value="rising">Rising</option>
+            <option value="">الكل</option>
+            <option value="active">نشط</option>
+            <option value="rising">صاعد</option>
           </select>
         </label>
         <label>
-          Window
+          الفترة
           <select value={filters.days} onChange={(event) => onFilter({ ...filters, days: event.target.value })}>
-            <option value="7">7 days</option>
-            <option value="14">14 days</option>
-            <option value="30">30 days</option>
-            <option value="90">90 days</option>
+            <option value="7">7 أيام</option>
+            <option value="14">14 يوما</option>
+            <option value="30">30 يوما</option>
+            <option value="90">90 يوما</option>
           </select>
         </label>
         <label>
-          Source
+          المصدر
           <select value={filters.sourceId} onChange={(event) => onFilter({ ...filters, sourceId: event.target.value })}>
-            <option value="">All</option>
+            <option value="">الكل</option>
             {sources.map((source) => <option key={source.id} value={source.id}>{source.label}</option>)}
           </select>
         </label>
@@ -330,22 +341,22 @@ function IssuesView({
             key={issue.id}
             onClick={() => void onSelect(issue.id)}
           >
-            <div>
+            <div className="issue-copy" dir="rtl">
               <strong>{issue.label}</strong>
               <span>{issue.summary}</span>
             </div>
             <dl>
-              <Stat label="Score" value={issue.score.toFixed(1)} />
-              <Stat label="7d" value={String(issue.recent_count)} />
-              <Stat label="Sources" value={String(issue.source_count)} />
+              <Stat label="الدرجة" value={issue.score.toFixed(1)} />
+              <Stat label="7 أيام" value={String(issue.recent_count)} />
+              <Stat label="المصادر" value={String(issue.source_count)} />
             </dl>
           </button>
         ))}
-        {!issues.length ? <EmptyState icon={<Newspaper />} title="No issue clusters yet" /> : null}
+        {!issues.length ? <EmptyState icon={<Newspaper />} title="لا توجد قضايا بعد" /> : null}
       </section>
 
       <section className="detail-pane" aria-label="Issue detail">
-        {issueDetail ? <IssueDetailPane issue={issueDetail} /> : <EmptyState icon={<Activity />} title="Select an issue" />}
+        {issueDetail ? <IssueDetailPane issue={issueDetail} /> : <EmptyState icon={<Activity />} title="اختر قضية" />}
       </section>
     </section>
   );
@@ -356,15 +367,15 @@ function IssueDetailPane({ issue }: { issue: IssueDetail }) {
   return (
     <>
       <header className="detail-header">
-        <div>
-          <p>{labelize(issue.category)}</p>
+        <div className="issue-copy" dir="rtl">
+          <p>{categoryLabel(issue.category)}</p>
           <h1>{issue.label}</h1>
           <span>{issue.summary}</span>
         </div>
         <dl>
-          <Stat label="Score" value={issue.score.toFixed(1)} />
-          <Stat label="Recent" value={String(issue.recent_count)} />
-          <Stat label="Prior" value={String(issue.previous_count)} />
+          <Stat label="الدرجة" value={issue.score.toFixed(1)} />
+          <Stat label="حديث" value={String(issue.recent_count)} />
+          <Stat label="السابق" value={String(issue.previous_count)} />
         </dl>
       </header>
       <section className="timeline">
@@ -388,7 +399,7 @@ function IssueDetailPane({ issue }: { issue: IssueDetail }) {
                 </a>
               ) : null}
             </header>
-            <p>{evidence.snippet}</p>
+            <p dir="auto">{evidence.snippet}</p>
           </article>
         ))}
         {!issue.evidence.length ? <EmptyState icon={<ShieldAlert />} title="Evidence expired" /> : null}
@@ -672,6 +683,10 @@ function SourceAccessNotice({
 
 function labelize(value: string) {
   return value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function categoryLabel(value: string) {
+  return categoryLabels[value] ?? labelize(value);
 }
 
 function formatDate(value: string) {

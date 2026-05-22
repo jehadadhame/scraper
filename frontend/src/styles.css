@@ -297,6 +297,10 @@ select {
   min-width: 0;
 }
 
+.issue-copy {
+  text-align: right;
+}
+
 .issue-row span {
   display: -webkit-box;
   overflow: hidden;

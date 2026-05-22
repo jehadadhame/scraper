@@ -38,6 +38,7 @@ from app.services.ingestion import (
     queue_run,
     reject_candidate,
 )
+from app.services.analysis import topic_for_key
 from app.services.text import snippet
 
 
@@ -253,11 +254,12 @@ def issue_has_item(
 
 
 def issue_read(cluster: IssueCluster) -> IssueRead:
+    topic = topic_for_key(cluster.fingerprint)
     return IssueRead(
         id=cluster.id,
-        category=cluster.category,
-        label=cluster.label,
-        summary=cluster.summary,
+        category=topic.category if topic else cluster.category,
+        label=topic.label if topic else cluster.label,
+        summary=topic.summary if topic else cluster.summary,
         score=cluster.score,
         latest_at=cluster.latest_at,
         recent_count=cluster.recent_count,
