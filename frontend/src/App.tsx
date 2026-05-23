@@ -472,6 +472,9 @@ function PostsView({
   onFilter: (filters: PostFilters) => void;
 }) {
   const timelinePeak = Math.max(...(stats?.timeline ?? []).map((point) => point.count), 1);
+  const selectedSource = filters.sourceId ? sources.find((source) => String(source.id) === filters.sourceId) : undefined;
+  const activeFilters = postFilterChips(filters, selectedSource);
+  const hasCustomFilters = activeFilters.length > 0 || filters.limit !== defaultPostFilters.limit;
   return (
     <section className="posts-view">
       <aside className="post-filters">
@@ -528,11 +531,39 @@ function PostsView({
       </aside>
 
       <section className="post-dashboard">
+        <header className="post-view-header">
+          <div>
+            <p>Post Explorer</p>
+            <h1>Collected posts</h1>
+            <span>
+              Showing {posts.length} of {stats?.total ?? 0} retained posts in the selected window.
+            </span>
+          </div>
+          <button
+            className="command secondary"
+            disabled={!hasCustomFilters}
+            onClick={() => onFilter(defaultPostFilters)}
+          >
+            <X /> Reset filters
+          </button>
+        </header>
+
+        {activeFilters.length ? (
+          <section className="filter-chips" aria-label="Active post filters">
+            {activeFilters.map((chip) => (
+              <button key={chip.key} onClick={() => onFilter(chip.nextFilters)}>
+                <span>{chip.label}</span>
+                <X />
+              </button>
+            ))}
+          </section>
+        ) : null}
+
         <section className="stats-grid" aria-label="Post statistics">
-          <StatCard label="Total posts" value={String(stats?.total ?? 0)} />
-          <StatCard label="Last 24h" value={String(stats?.last_24h ?? 0)} />
-          <StatCard label="Last 7d" value={String(stats?.last_7d ?? 0)} />
-          <StatCard label="Visible rows" value={String(posts.length)} />
+          <StatCard label="Total posts" value={compactNumber(stats?.total ?? 0)} />
+          <StatCard label="Last 24h" value={compactNumber(stats?.last_24h ?? 0)} />
+          <StatCard label="Last 7d" value={compactNumber(stats?.last_7d ?? 0)} />
+          <StatCard label="Visible rows" value={compactNumber(posts.length)} />
         </section>
 
         <section className="post-stat-panels">
@@ -554,7 +585,7 @@ function PostsView({
               {(stats?.top_sources ?? []).map((source) => (
                 <div key={source.source_id}>
                   <span><b>{source.label}</b><small>{source.platform}</small></span>
-                  <strong>{source.count}</strong>
+                  <strong>{compactNumber(source.count)}</strong>
                 </div>
               ))}
               {!stats?.top_sources.length ? <small>No source counts yet</small> : null}
@@ -566,13 +597,13 @@ function PostsView({
               {(stats?.by_platform ?? []).map((entry) => (
                 <div key={`platform-${entry.key}`}>
                   <span>{labelize(entry.label)}</span>
-                  <strong>{entry.count}</strong>
+                  <strong>{compactNumber(entry.count)}</strong>
                 </div>
               ))}
               {(stats?.by_language ?? []).map((entry) => (
                 <div key={`language-${entry.key}`}>
                   <span>{entry.label}</span>
-                  <strong>{entry.count}</strong>
+                  <strong>{compactNumber(entry.count)}</strong>
                 </div>
               ))}
             </section>
@@ -583,13 +614,17 @@ function PostsView({
           {posts.map((post) => (
             <article key={post.id} className="post-row">
               <header>
-                <span className={`platform-pill ${post.platform}`}>{post.platform}</span>
-                <strong>{post.source_label}</strong>
-                <span>{languageLabel(post.language)}</span>
-                <time>{formatDate(post.posted_at)}</time>
+                <div>
+                  <span className={`platform-pill ${post.platform}`}>{post.platform}</span>
+                  <strong>{post.source_label}</strong>
+                </div>
+                <div className="post-meta">
+                  <span>{languageLabel(post.language)}</span>
+                  <time>{formatDate(post.posted_at)}</time>
+                </div>
                 {post.original_url ? (
-                  <a href={post.original_url} target="_blank" rel="noreferrer" aria-label="Open original source">
-                    <ArrowUpRight />
+                  <a className="post-link" href={post.original_url} target="_blank" rel="noreferrer" aria-label="Open original source">
+                    Open <ArrowUpRight />
                   </a>
                 ) : null}
               </header>
@@ -895,6 +930,54 @@ function categoryLabel(value: string) {
 
 function languageLabel(value: string) {
   return languageLabels[value] ?? value;
+}
+
+function postFilterChips(filters: PostFilters, selectedSource?: Source) {
+  const chips: { key: string; label: string; nextFilters: PostFilters }[] = [];
+  if (filters.q) {
+    chips.push({
+      key: "q",
+      label: `Search: ${filters.q}`,
+      nextFilters: { ...filters, q: "" },
+    });
+  }
+  if (filters.platform) {
+    chips.push({
+      key: "platform",
+      label: `Platform: ${labelize(filters.platform)}`,
+      nextFilters: { ...filters, platform: "" },
+    });
+  }
+  if (filters.language) {
+    chips.push({
+      key: "language",
+      label: `Language: ${languageLabel(filters.language)}`,
+      nextFilters: { ...filters, language: "" },
+    });
+  }
+  if (filters.sourceId) {
+    chips.push({
+      key: "source",
+      label: `Source: ${selectedSource?.label ?? filters.sourceId}`,
+      nextFilters: { ...filters, sourceId: "" },
+    });
+  }
+  if (filters.days !== defaultPostFilters.days) {
+    chips.push({
+      key: "days",
+      label: `Window: ${postWindowLabel(filters.days)}`,
+      nextFilters: { ...filters, days: defaultPostFilters.days },
+    });
+  }
+  return chips;
+}
+
+function postWindowLabel(value: string) {
+  return { "1": "24 hours", "7": "7 days", "30": "30 days", "90": "90 days" }[value] ?? `${value} days`;
+}
+
+function compactNumber(value: number) {
+  return new Intl.NumberFormat(undefined, { notation: "compact", maximumFractionDigits: 1 }).format(value);
 }
 
 function sourceUrlPlaceholder(platform: Platform) {

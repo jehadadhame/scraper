@@ -429,8 +429,8 @@ dd {
 
 .posts-view {
   display: grid;
-  gap: 16px;
-  grid-template-columns: minmax(190px, 250px) minmax(0, 1fr);
+  gap: 18px;
+  grid-template-columns: minmax(210px, 270px) minmax(0, 1fr);
 }
 
 .post-filters {
@@ -439,11 +439,70 @@ dd {
   display: grid;
   gap: 13px;
   padding-right: 16px;
+  position: sticky;
+  top: 14px;
 }
 
 .post-dashboard {
   display: grid;
-  gap: 16px;
+  gap: 14px;
+}
+
+.post-view-header {
+  align-items: center;
+  border-bottom: 1px solid #c9d4ce;
+  display: flex;
+  gap: 14px;
+  justify-content: space-between;
+  min-height: 74px;
+  padding-bottom: 12px;
+}
+
+.post-view-header div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.post-view-header p {
+  color: #a62d3c;
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.post-view-header h1 {
+  color: #071b18;
+  font-size: 1.45rem;
+  line-height: 1.15;
+}
+
+.post-view-header span {
+  color: #5c645e;
+}
+
+.filter-chips {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.filter-chips button {
+  align-items: center;
+  background: #e3ece7;
+  border: 1px solid #b7c4bc;
+  border-radius: 999px;
+  color: #172019;
+  display: inline-flex;
+  gap: 7px;
+  min-height: 32px;
+  padding: 0 9px 0 12px;
+}
+
+.filter-chips svg {
+  height: 14px;
+  width: 14px;
 }
 
 .stats-grid {
@@ -456,9 +515,10 @@ dd {
   background: #fbfdfc;
   border: 1px solid #c9d4ce;
   border-radius: 7px;
+  border-top: 3px solid #0d503e;
   display: grid;
   gap: 8px;
-  min-height: 86px;
+  min-height: 92px;
   padding: 13px;
 }
 
@@ -476,18 +536,22 @@ dd {
 .post-stat-panels {
   display: grid;
   gap: 14px;
-  grid-template-columns: minmax(280px, 1.2fr) minmax(220px, 0.9fr) minmax(200px, 0.8fr);
+  grid-template-columns: minmax(340px, 1.35fr) minmax(220px, 0.82fr) minmax(200px, 0.72fr);
 }
 
 .post-stat-panels > div {
+  background: #f7faf8;
+  border: 1px solid #d4ded8;
+  border-radius: 7px;
   display: grid;
   gap: 10px;
   min-width: 0;
+  padding: 12px;
 }
 
 .post-timeline {
   align-items: end;
-  border-bottom: 1px solid #c9d4ce;
+  border-bottom: 1px solid #b7c4bc;
   display: flex;
   gap: 6px;
   height: 148px;
@@ -509,7 +573,7 @@ dd {
 .rank-list div {
   align-items: center;
   background: #fbfdfc;
-  border: 1px solid #c9d4ce;
+  border: 1px solid #d4ded8;
   border-radius: 6px;
   display: flex;
   gap: 12px;
@@ -537,30 +601,60 @@ dd {
   background: #fbfdfc;
   border: 1px solid #c9d4ce;
   border-radius: 7px;
+  border-left: 4px solid #0d503e;
   display: grid;
   gap: 10px;
-  padding: 13px;
+  padding: 13px 14px;
 }
 
 .post-row header {
+  align-items: start;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+}
+
+.post-row header > div:first-child,
+.post-meta {
   align-items: center;
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+  min-width: 0;
 }
 
-.post-row header > span:not(.platform-pill),
-.post-row time {
+.post-row header strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.post-meta {
+  justify-content: flex-end;
+}
+
+.post-meta span,
+.post-meta time {
   color: #657169;
   font-size: 0.82rem;
+  white-space: nowrap;
 }
 
-.post-row a {
+.post-link {
+  align-items: center;
+  border: 1px solid #b7c4bc;
+  border-radius: 5px;
   color: #0d503e;
   display: inline-flex;
+  font-size: 0.82rem;
+  font-weight: 700;
+  gap: 4px;
+  min-height: 30px;
+  padding: 0 8px;
+  text-decoration: none;
+  white-space: nowrap;
 }
 
-.post-row a svg {
+.post-link svg {
   height: 18px;
   width: 18px;
 }
@@ -568,6 +662,7 @@ dd {
 .post-row p {
   line-height: 1.55;
   overflow-wrap: anywhere;
+  padding-left: 2px;
 }
 
 .platform-pill {
@@ -781,6 +876,10 @@ dd {
     padding: 0;
   }
 
+  .post-filters {
+    position: static;
+  }
+
   .filter-rail {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -831,8 +930,19 @@ dd {
   .issue-row,
   .detail-header,
   .candidate-row,
+  .post-row header,
   .source-access-notice {
     grid-template-columns: 1fr;
+  }
+
+  .post-view-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .post-meta {
+    align-items: start;
+    justify-content: flex-start;
   }
 
   .issue-row dl,
