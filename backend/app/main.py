@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Response, status
@@ -27,8 +27,13 @@ from app.schemas import (
     IssueDetail,
     IssuePointRead,
     IssueRead,
+    CountRead,
+    PostRead,
+    PostStatsRead,
+    PostTimelineRead,
     RunCreate,
     RunRead,
+    SourceCountRead,
     SourceCreate,
     SourceRead,
     SourceUpdate,
@@ -223,6 +228,128 @@ def create_app(initialize_database: bool = True) -> FastAPI:
             ],
         )
 
+    @application.get("/api/posts", response_model=list[PostRead])
+    def list_posts(
+        session: SessionDep,
+        platform: str | None = None,
+        language: str | None = None,
+        source_id: int | None = None,
+        q: str | None = None,
+        days: int = Query(default=30, ge=1, le=365),
+        limit: int = Query(default=100, ge=1, le=300),
+    ) -> list[PostRead]:
+        query = (
+            select(CollectedItem, Source)
+            .join(Source, Source.id == CollectedItem.source_id)
+            .where(
+                *post_filters(
+                    platform=platform,
+                    language=language,
+                    source_id=source_id,
+                    q=q,
+                    days=days,
+                )
+            )
+            .order_by(desc(CollectedItem.posted_at))
+            .limit(limit)
+        )
+        return [
+            post_read(item=item, source=source)
+            for item, source in session.execute(query).all()
+        ]
+
+    @application.get("/api/posts/stats", response_model=PostStatsRead)
+    def post_stats(
+        session: SessionDep,
+        platform: str | None = None,
+        language: str | None = None,
+        source_id: int | None = None,
+        q: str | None = None,
+        days: int = Query(default=30, ge=1, le=365),
+    ) -> PostStatsRead:
+        filters = post_filters(
+            platform=platform,
+            language=language,
+            source_id=source_id,
+            q=q,
+            days=days,
+        )
+        recent_24h = datetime.now(UTC) - timedelta(days=1)
+        recent_7d = datetime.now(UTC) - timedelta(days=7)
+        bucket = func.date(CollectedItem.posted_at)
+
+        total = session.scalar(
+            select(func.count(CollectedItem.id)).where(*filters)
+        ) or 0
+        last_24h = session.scalar(
+            select(func.count(CollectedItem.id)).where(
+                *filters, CollectedItem.posted_at >= recent_24h
+            )
+        ) or 0
+        last_7d = session.scalar(
+            select(func.count(CollectedItem.id)).where(
+                *filters, CollectedItem.posted_at >= recent_7d
+            )
+        ) or 0
+
+        platform_rows = session.execute(
+            select(CollectedItem.platform, func.count(CollectedItem.id))
+            .where(*filters)
+            .group_by(CollectedItem.platform)
+            .order_by(desc(func.count(CollectedItem.id)))
+        ).all()
+        language_rows = session.execute(
+            select(CollectedItem.language, func.count(CollectedItem.id))
+            .where(*filters)
+            .group_by(CollectedItem.language)
+            .order_by(desc(func.count(CollectedItem.id)))
+        ).all()
+        source_rows = session.execute(
+            select(Source.id, Source.label, Source.platform, func.count(CollectedItem.id))
+            .join(CollectedItem, CollectedItem.source_id == Source.id)
+            .where(*filters)
+            .group_by(Source.id, Source.label, Source.platform)
+            .order_by(desc(func.count(CollectedItem.id)))
+            .limit(8)
+        ).all()
+        timeline_rows = session.execute(
+            select(bucket, func.count(CollectedItem.id))
+            .where(*filters)
+            .group_by(bucket)
+            .order_by(bucket)
+        ).all()
+
+        return PostStatsRead(
+            total=total,
+            last_24h=last_24h,
+            last_7d=last_7d,
+            by_platform=[
+                CountRead(key=key or "unknown", label=key or "unknown", count=count)
+                for key, count in platform_rows
+            ],
+            by_language=[
+                CountRead(
+                    key=key or "unknown",
+                    label=language_label(key or "unknown"),
+                    count=count,
+                )
+                for key, count in language_rows
+            ],
+            top_sources=[
+                SourceCountRead(
+                    source_id=row_id,
+                    label=label,
+                    platform=row_platform,
+                    count=count,
+                )
+                for row_id, label, row_platform, count in source_rows
+            ],
+            timeline=[
+                PostTimelineRead(bucket_date=parse_bucket_date(row_date), count=count)
+                for row_date, count in timeline_rows
+            ],
+        )
+
     return application
 
 
@@ -253,6 +380,25 @@ def issue_has_item(
     return exists(query)
 
 
+def post_filters(
+    platform: str | None = None,
+    language: str | None = None,
+    source_id: int | None = None,
+    q: str | None = None,
+    days: int = 30,
+):
+    filters = [CollectedItem.posted_at >= datetime.now(UTC) - timedelta(days=days)]
+    if platform:
+        filters.append(CollectedItem.platform == platform)
+    if language:
+        filters.append(CollectedItem.language == language)
+    if source_id:
+        filters.append(CollectedItem.source_id == source_id)
+    if q:
+        filters.append(CollectedItem.text.ilike(f"%{q}%"))
+    return filters
+
+
 def issue_read(cluster: IssueCluster) -> IssueRead:
     topic = topic_for_key(cluster.fingerprint)
     return IssueRead(
@@ -267,6 +413,32 @@ def issue_read(cluster: IssueCluster) -> IssueRead:
         source_count=cluster.source_count,
         language_counts=cluster.language_counts or {},
     )
+
+
+def post_read(item: CollectedItem, source: Source) -> PostRead:
+    return PostRead(
+        id=item.id,
+        source_id=source.id,
+        source_label=source.label,
+        platform=item.platform,
+        language=item.language,
+        snippet=snippet(item.text, max_chars=700),
+        original_url=item.original_url,
+        posted_at=item.posted_at,
+        collected_at=item.collected_at,
+    )
+
+
+def language_label(value: str) -> str:
+    return {"ar": "Arabic", "en": "English", "unknown": "Unknown"}.get(value, value)
+
+
+def parse_bucket_date(value) -> date:
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    return date.fromisoformat(str(value)[:10])
 
 
 def get_or_404(session: Session, model: type, model_id: int):

@@ -1,5 +1,5 @@
 export type Platform = "telegram" | "discord" | "facebook" | "news";
-export type View = "issues" | "sources" | "discovery" | "runs";
+export type View = "issues" | "posts" | "sources" | "discovery" | "runs";
 
 export interface Source {
   id: number;
@@ -90,6 +90,55 @@ export interface IssueFilters {
   sourceId: string;
 }
 
+export interface Post {
+  id: number;
+  source_id: number;
+  source_label: string;
+  platform: Platform;
+  language: string;
+  snippet: string;
+  original_url: string | null;
+  posted_at: string;
+  collected_at: string;
+}
+
+export interface Count {
+  key: string;
+  label: string;
+  count: number;
+}
+
+export interface SourceCount {
+  source_id: number;
+  label: string;
+  platform: Platform;
+  count: number;
+}
+
+export interface PostTimelinePoint {
+  bucket_date: string;
+  count: number;
+}
+
+export interface PostStats {
+  total: number;
+  last_24h: number;
+  last_7d: number;
+  by_platform: Count[];
+  by_language: Count[];
+  top_sources: SourceCount[];
+  timeline: PostTimelinePoint[];
+}
+
+export interface PostFilters {
+  q: string;
+  platform: string;
+  language: string;
+  sourceId: string;
+  days: string;
+  limit: string;
+}
+
 const apiRoot = import.meta.env.VITE_API_URL ?? "http://127.0.0.1:8000/api";
 
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {
@@ -126,3 +175,28 @@ export function issueQuery(filters: IssueFilters): string {
   return `/issues${query ? `?${query}` : ""}`;
 }
 
+export function postQuery(filters: PostFilters): string {
+  const params = postParams(filters);
+  if (filters.limit) params.set("limit", filters.limit);
+  const query = params.toString();
+  return `/posts${query ? `?${query}` : ""}`;
+}
+
+export function postStatsQuery(filters: PostFilters): string {
+  const query = postParams(filters).toString();
+  return `/posts/stats${query ? `?${query}` : ""}`;
+}
+
+function postParams(filters: PostFilters): URLSearchParams {
+  const params = new URLSearchParams();
+  Object.entries({
+    q: filters.q,
+    platform: filters.platform,
+    language: filters.language,
+    days: filters.days,
+    source_id: filters.sourceId,
+  }).forEach(([key, value]) => {
+    if (value) params.set(key, value);
+  });
+  return params;
+}

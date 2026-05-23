@@ -118,3 +118,42 @@ class IssueDetail(IssueRead):
     evidence: list[EvidenceRead]
     timeline: list[IssuePointRead]
 
+
+class PostRead(BaseModel):
+    id: int
+    source_id: int
+    source_label: str
+    platform: str
+    language: str
+    snippet: str
+    original_url: str | None
+    posted_at: datetime
+    collected_at: datetime
+
+
+class CountRead(BaseModel):
+    key: str
+    label: str
+    count: int
+
+
+class SourceCountRead(BaseModel):
+    source_id: int
+    label: str
+    platform: str
+    count: int
+
+
+class PostTimelineRead(BaseModel):
+    bucket_date: date
+    count: int
+
+
+class PostStatsRead(BaseModel):
+    total: int
+    last_24h: int
+    last_7d: int
+    by_platform: list[CountRead]
+    by_language: list[CountRead]
+    top_sources: list[SourceCountRead]
+    timeline: list[PostTimelineRead]

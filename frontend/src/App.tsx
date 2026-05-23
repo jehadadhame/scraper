@@ -1,6 +1,7 @@
 import {
   Activity,
   ArrowUpRight,
+  BarChart3,
   Check,
   Clock3,
   DatabaseZap,
@@ -23,6 +24,11 @@ import {
   IssueFilters,
   issueQuery,
   Platform,
+  Post,
+  PostFilters,
+  postQuery,
+  PostStats,
+  postStatsQuery,
   Run,
   Source,
   View,
@@ -35,6 +41,15 @@ const defaultFilters: IssueFilters = {
   trend: "active",
   days: "14",
   sourceId: "",
+};
+
+const defaultPostFilters: PostFilters = {
+  q: "",
+  platform: "",
+  language: "",
+  sourceId: "",
+  days: "30",
+  limit: "100",
 };
 
 const platforms: Platform[] = ["telegram", "discord", "facebook", "news"];
@@ -60,6 +75,11 @@ const categoryLabels: Record<string, string> = {
   safety: "السلامة",
   other: "أخرى",
 };
+const languageLabels: Record<string, string> = {
+  ar: "Arabic",
+  en: "English",
+  unknown: "Unknown",
+};
 
 export function App() {
   const [view, setView] = useState<View>("issues");
@@ -68,7 +88,10 @@ export function App() {
   const [runs, setRuns] = useState<Run[]>([]);
   const [issues, setIssues] = useState<Issue[]>([]);
   const [issueDetail, setIssueDetail] = useState<IssueDetail | null>(null);
+  const [posts, setPosts] = useState<Post[]>([]);
+  const [postStats, setPostStats] = useState<PostStats | null>(null);
   const [filters, setFilters] = useState(defaultFilters);
+  const [postFilters, setPostFilters] = useState(defaultPostFilters);
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
 
@@ -99,6 +122,19 @@ export function App() {
     }
   }, [filters, issueDetail?.id]);
 
+  const loadPosts = useCallback(async () => {
+    try {
+      const [nextPosts, nextStats] = await Promise.all([
+        api<Post[]>(postQuery(postFilters)),
+        api<PostStats>(postStatsQuery(postFilters)),
+      ]);
+      setPosts(nextPosts);
+      setPostStats(nextStats);
+    } catch (nextError) {
+      setError(errorMessage(nextError));
+    }
+  }, [postFilters]);
+
   useEffect(() => {
     void loadBase();
   }, [loadBase]);
@@ -107,10 +143,14 @@ export function App() {
     void loadIssues();
   }, [loadIssues]);
 
+  useEffect(() => {
+    void loadPosts();
+  }, [loadPosts]);
+
   async function refreshAll() {
     setBusy("refresh");
     setError("");
-    await Promise.all([loadBase(), loadIssues()]);
+    await Promise.all([loadBase(), loadIssues(), loadPosts()]);
     setBusy("");
   }
 
@@ -202,10 +242,11 @@ export function App() {
       <header className="topbar">
         <div className="brand">
           <strong>Palestine Signals</strong>
-          <span>{issues.length} قضايا نشطة</span>
+          <span>{issues.length} قضايا نشطة · {postStats?.total ?? posts.length} posts</span>
         </div>
         <nav className="tabs" aria-label="Dashboard views">
           <Tab view={view} value="issues" label="القضايا" onSelect={setView} icon={<Activity />} />
+          <Tab view={view} value="posts" label="Posts" onSelect={setView} icon={<BarChart3 />} />
           <Tab view={view} value="sources" label="Sources" onSelect={setView} icon={<DatabaseZap />} />
           <Tab view={view} value="discovery" label="Review" onSelect={setView} icon={<FileSearch />} />
           <Tab view={view} value="runs" label="Runs" onSelect={setView} icon={<Clock3 />} />
@@ -253,6 +294,15 @@ export function App() {
           onUpdate={updateSource}
           onDelete={deleteSource}
           onError={setError}
+        />
+      ) : null}
+      {view === "posts" ? (
+        <PostsView
+          filters={postFilters}
+          sources={sources}
+          posts={posts}
+          stats={postStats}
+          onFilter={setPostFilters}
         />
       ) : null}
       {view === "discovery" ? (
@@ -405,6 +455,151 @@ function IssueDetailPane({ issue }: { issue: IssueDetail }) {
         {!issue.evidence.length ? <EmptyState icon={<ShieldAlert />} title="Evidence expired" /> : null}
       </section>
     </>
+  );
+}
+
+function PostsView({
+  filters,
+  sources,
+  posts,
+  stats,
+  onFilter,
+}: {
+  filters: PostFilters;
+  sources: Source[];
+  posts: Post[];
+  stats: PostStats | null;
+  onFilter: (filters: PostFilters) => void;
+}) {
+  const timelinePeak = Math.max(...(stats?.timeline ?? []).map((point) => point.count), 1);
+  return (
+    <section className="posts-view">
+      <aside className="post-filters">
+        <h2><Filter /> Post filters</h2>
+        <label>
+          Search
+          <input
+            value={filters.q}
+            onChange={(event) => onFilter({ ...filters, q: event.target.value })}
+            placeholder="water, medicine, حاجز"
+          />
+        </label>
+        <label>
+          Platform
+          <select value={filters.platform} onChange={(event) => onFilter({ ...filters, platform: event.target.value })}>
+            <option value="">All</option>
+            {platforms.map((platform) => <option key={platform} value={platform}>{labelize(platform)}</option>)}
+          </select>
+        </label>
+        <label>
+          Language
+          <select value={filters.language} onChange={(event) => onFilter({ ...filters, language: event.target.value })}>
+            <option value="">All</option>
+            <option value="ar">Arabic</option>
+            <option value="en">English</option>
+            <option value="unknown">Unknown</option>
+          </select>
+        </label>
+        <label>
+          Window
+          <select value={filters.days} onChange={(event) => onFilter({ ...filters, days: event.target.value })}>
+            <option value="1">24 hours</option>
+            <option value="7">7 days</option>
+            <option value="30">30 days</option>
+            <option value="90">90 days</option>
+          </select>
+        </label>
+        <label>
+          Source
+          <select value={filters.sourceId} onChange={(event) => onFilter({ ...filters, sourceId: event.target.value })}>
+            <option value="">All</option>
+            {sources.map((source) => <option key={source.id} value={source.id}>{source.label}</option>)}
+          </select>
+        </label>
+        <label>
+          Rows
+          <select value={filters.limit} onChange={(event) => onFilter({ ...filters, limit: event.target.value })}>
+            <option value="50">50</option>
+            <option value="100">100</option>
+            <option value="200">200</option>
+            <option value="300">300</option>
+          </select>
+        </label>
+      </aside>
+
+      <section className="post-dashboard">
+        <section className="stats-grid" aria-label="Post statistics">
+          <StatCard label="Total posts" value={String(stats?.total ?? 0)} />
+          <StatCard label="Last 24h" value={String(stats?.last_24h ?? 0)} />
+          <StatCard label="Last 7d" value={String(stats?.last_7d ?? 0)} />
+          <StatCard label="Visible rows" value={String(posts.length)} />
+        </section>
+
+        <section className="post-stat-panels">
+          <div>
+            <h2>Timeline</h2>
+            <section className="post-timeline">
+              {(stats?.timeline ?? []).map((point) => (
+                <div key={point.bucket_date} className="bar-slot" title={`${point.bucket_date}: ${point.count}`}>
+                  <i style={{ height: `${Math.max((point.count / timelinePeak) * 100, 8)}%` }} />
+                  <span>{point.bucket_date.slice(5)}</span>
+                </div>
+              ))}
+              {!stats?.timeline.length ? <small>No posts in this window</small> : null}
+            </section>
+          </div>
+          <div>
+            <h2>Top sources</h2>
+            <section className="rank-list">
+              {(stats?.top_sources ?? []).map((source) => (
+                <div key={source.source_id}>
+                  <span><b>{source.label}</b><small>{source.platform}</small></span>
+                  <strong>{source.count}</strong>
+                </div>
+              ))}
+              {!stats?.top_sources.length ? <small>No source counts yet</small> : null}
+            </section>
+          </div>
+          <div>
+            <h2>Breakdown</h2>
+            <section className="rank-list compact">
+              {(stats?.by_platform ?? []).map((entry) => (
+                <div key={`platform-${entry.key}`}>
+                  <span>{labelize(entry.label)}</span>
+                  <strong>{entry.count}</strong>
+                </div>
+              ))}
+              {(stats?.by_language ?? []).map((entry) => (
+                <div key={`language-${entry.key}`}>
+                  <span>{entry.label}</span>
+                  <strong>{entry.count}</strong>
+                </div>
+              ))}
+            </section>
+          </div>
+        </section>
+
+        <section className="post-list" aria-label="Collected posts">
+          {posts.map((post) => (
+            <article key={post.id} className="post-row">
+              <header>
+                <span className={`platform-pill ${post.platform}`}>{post.platform}</span>
+                <strong>{post.source_label}</strong>
+                <span>{languageLabel(post.language)}</span>
+                <time>{formatDate(post.posted_at)}</time>
+                {post.original_url ? (
+                  <a href={post.original_url} target="_blank" rel="noreferrer" aria-label="Open original source">
+                    <ArrowUpRight />
+                  </a>
+                ) : null}
+              </header>
+              <p dir="auto">{post.snippet}</p>
+            </article>
+          ))}
+          {!posts.length ? <EmptyState icon={<Newspaper />} title="No posts match these filters" /> : null}
+        </section>
+      </section>
+    </section>
   );
 }
 
@@ -642,6 +837,10 @@ function Stat({ label, value }: { label: string; value: string }) {
   return <div><dt>{label}</dt><dd>{value}</dd></div>;
 }
 
+function StatCard({ label, value }: { label: string; value: string }) {
+  return <article className="stat-card"><span>{label}</span><strong>{value}</strong></article>;
+}
+
 function EmptyState({ icon, title }: { icon: React.ReactNode; title: string }) {
   return <div className="empty-state">{icon}<strong>{title}</strong></div>;
 }
@@ -692,6 +891,10 @@ function labelize(value: string) {
 
 function categoryLabel(value: string) {
   return categoryLabels[value] ?? labelize(value);
+}
+
+function languageLabel(value: string) {
+  return languageLabels[value] ?? value;
 }
 
 function sourceUrlPlaceholder(platform: Platform) {

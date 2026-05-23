@@ -1,13 +1,16 @@
 from collections.abc import Generator
+from datetime import UTC, datetime, timedelta
 
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from app.connectors.base import CollectedRecord
 from app.db import get_session, init_db
 from app.main import create_app
-from app.models import DiscoveryCandidate
+from app.models import DiscoveryCandidate, Source
+from app.services.ingestion import store_item
 
 
 def test_source_crud_and_candidate_review() -> None:
@@ -61,3 +64,58 @@ def test_source_crud_and_candidate_review() -> None:
 
     deleted = client.delete(f"/api/sources/{source_id}")
     assert deleted.status_code == 204
+
+
+def test_post_list_and_stats_filters() -> None:
+    engine = create_engine(
+        "sqlite+pysqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    init_db(engine)
+    testing_session = sessionmaker(bind=engine, expire_on_commit=False)
+    app = create_app(initialize_database=False)
+
+    def session_override() -> Generator[Session, None, None]:
+        with testing_session() as session:
+            yield session
+
+    app.dependency_overrides[get_session] = session_override
+    now = datetime.now(UTC)
+    with testing_session() as session:
+        telegram = Source(platform="telegram", label="Telegram A", external_id="telegram-a")
+        news = Source(platform="news", label="News feed", url="https://feed.test/rss")
+        session.add_all([telegram, news])
+        session.flush()
+        store_item(
+            session,
+            telegram,
+            CollectedRecord(
+                platform="telegram",
+                external_id="m1",
+                text="ازمة مياه في الحي وحاجة لصهاريج",
+                posted_at=now,
+            ),
+        )
+        store_item(
+            session,
+            news,
+            CollectedRecord(
+                platform="news",
+                external_id="n1",
+                text="Medicine shortage at the clinic",
+                posted_at=now - timedelta(days=2),
+            ),
+        )
+        session.commit()
+
+    client = TestClient(app)
+    searched = client.get("/api/posts", params={"q": "مياه", "language": "ar"}).json()
+    assert len(searched) == 1
+    assert searched[0]["source_label"] == "Telegram A"
+
+    stats = client.get("/api/posts/stats", params={"days": 30}).json()
+    assert stats["total"] == 2
+    assert stats["last_7d"] == 2
+    assert stats["by_platform"][0]["count"] >= 1
+    assert {entry["label"] for entry in stats["by_language"]} == {"Arabic", "English"}
