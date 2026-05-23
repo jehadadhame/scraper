@@ -16,7 +16,7 @@ from app.models import (
     Source,
     utcnow,
 )
-from app.services.analysis import attach_item_to_issue, refresh_all_clusters
+from app.services.analysis import rebuild_issue_clusters, refresh_all_clusters
 from app.services.text import content_hash, dedupe_key, detect_language, normalize_text
 
 
@@ -35,6 +35,8 @@ async def execute_run(session: Session, run: IngestionRun) -> IngestionRun:
     try:
         if run.kind == "ingest":
             run.collected_count, run.analyzed_count = await ingest_sources(session)
+        elif run.kind == "analyze":
+            run.analyzed_count = rebuild_issue_clusters(session)
         elif run.kind == "discover":
             run.discovered_count = await discover_sources(session)
         elif run.kind == "retention":
@@ -58,7 +60,6 @@ async def execute_run(session: Session, run: IngestionRun) -> IngestionRun:
 async def ingest_sources(session: Session) -> tuple[int, int]:
     connectors = build_connectors()
     collected_count = 0
-    analyzed_count = 0
     sources = session.scalars(select(Source).where(Source.enabled.is_(True))).all()
 
     for source in sources:
@@ -85,8 +86,6 @@ async def ingest_sources(session: Session) -> tuple[int, int]:
                 collected_count += 1
                 if is_recent_content_duplicate(session, item):
                     continue
-                if attach_item_to_issue(session, item):
-                    analyzed_count += 1
             session.commit()
         except ConnectorError as exc:
             session.rollback()
@@ -104,6 +103,7 @@ async def ingest_sources(session: Session) -> tuple[int, int]:
                 source.health = str(exc)
                 source.last_run_at = utcnow()
                 session.commit()
+    analyzed_count = rebuild_issue_clusters(session)
     return collected_count, analyzed_count
 
 

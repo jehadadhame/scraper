@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import Counter
 from contextlib import asynccontextmanager
 from datetime import UTC, date, datetime, timedelta
 from typing import Annotated
@@ -21,6 +22,8 @@ from app.models import (
     Source,
 )
 from app.schemas import (
+    AnalyticsStatsRead,
+    AnalyticsTimelineRead,
     CandidateRead,
     CandidateReview,
     EvidenceRead,
@@ -167,7 +170,7 @@ def create_app(initialize_database: bool = True) -> FastAPI:
         if source_id:
             query = query.where(issue_has_item(source_id=source_id))
         if trend == "rising":
-            query = query.where(IssueCluster.recent_count > IssueCluster.previous_count)
+            query = query.where(IssueCluster.trend.in_(["rising", "new"]))
         elif trend == "active":
             query = query.where(IssueCluster.recent_count > 0)
         if q:
@@ -350,12 +353,146 @@ def create_app(initialize_database: bool = True) -> FastAPI:
             ],
         )
 
+    @application.get("/api/analytics", response_model=AnalyticsStatsRead)
+    def analytics_stats(
+        session: SessionDep,
+        category: str | None = None,
+        platform: str | None = None,
+        language: str | None = None,
+        source_id: int | None = None,
+        days: int = Query(default=30, ge=1, le=365),
+    ) -> AnalyticsStatsRead:
+        now = datetime.now(UTC)
+        item_filters = analytics_post_filters(
+            platform=platform,
+            language=language,
+            source_id=source_id,
+            category=category,
+            days=days,
+        )
+        issue_query = select(IssueCluster).where(
+            IssueCluster.latest_at >= now - timedelta(days=days)
+        )
+        if category:
+            issue_query = issue_query.where(IssueCluster.category == category)
+        if platform:
+            issue_query = issue_query.where(issue_has_item(platform=platform))
+        if language:
+            issue_query = issue_query.where(issue_has_item(language=language))
+        if source_id:
+            issue_query = issue_query.where(issue_has_item(source_id=source_id))
+
+        total_posts = session.scalar(
+            select(func.count(CollectedItem.id)).where(*item_filters)
+        ) or 0
+        analyzed_posts = session.scalar(
+            select(func.count(func.distinct(CollectedItem.id)))
+            .join(IssueEvidence, IssueEvidence.item_id == CollectedItem.id)
+            .join(IssueCluster, IssueCluster.id == IssueEvidence.cluster_id)
+            .where(*item_filters)
+        ) or 0
+        issue_count = session.scalar(
+            select(func.count()).select_from(issue_query.order_by(None).subquery())
+        ) or 0
+        rising_issue_count = session.scalar(
+            select(func.count()).select_from(
+                issue_query.where(IssueCluster.trend.in_(["rising", "new"]))
+                .order_by(None)
+                .subquery()
+            )
+        ) or 0
+
+        bucket = func.date(CollectedItem.posted_at)
+        post_rows = dict(
+            session.execute(
+                select(bucket, func.count(CollectedItem.id))
+                .where(*item_filters)
+                .group_by(bucket)
+                .order_by(bucket)
+            ).all()
+        )
+        issue_rows = dict(
+            session.execute(
+                select(bucket, func.count(func.distinct(IssueEvidence.cluster_id)))
+                .join(IssueEvidence, IssueEvidence.item_id == CollectedItem.id)
+                .join(IssueCluster, IssueCluster.id == IssueEvidence.cluster_id)
+                .where(*item_filters)
+                .group_by(bucket)
+                .order_by(bucket)
+            ).all()
+        )
+
+        category_rows = session.execute(
+            select(IssueCluster.category, func.count(func.distinct(CollectedItem.id)))
+            .join(IssueEvidence, IssueEvidence.cluster_id == IssueCluster.id)
+            .join(CollectedItem, CollectedItem.id == IssueEvidence.item_id)
+            .where(*item_filters)
+            .group_by(IssueCluster.category)
+            .order_by(desc(func.count(func.distinct(CollectedItem.id))))
+        ).all()
+        source_rows = session.execute(
+            select(Source.id, Source.label, Source.platform, func.count(CollectedItem.id))
+            .join(CollectedItem, CollectedItem.source_id == Source.id)
+            .where(*item_filters)
+            .group_by(Source.id, Source.label, Source.platform)
+            .order_by(desc(func.count(CollectedItem.id)))
+            .limit(8)
+        ).all()
+
+        clusters = session.scalars(issue_query).all()
+        keyword_counts: Counter[str] = Counter()
+        for cluster in clusters:
+            for keyword in (cluster.keywords or [])[:6]:
+                keyword_counts[keyword] += max(cluster.recent_count, 1)
+
+        top_issues = session.scalars(
+            issue_query.order_by(desc(IssueCluster.score), desc(IssueCluster.latest_at)).limit(8)
+        ).all()
+        timeline_dates = sorted({*post_rows.keys(), *issue_rows.keys()}, key=parse_bucket_date)
+        return AnalyticsStatsRead(
+            total_posts=total_posts,
+            analyzed_posts=analyzed_posts,
+            issue_count=issue_count,
+            rising_issue_count=rising_issue_count,
+            timeline=[
+                AnalyticsTimelineRead(
+                    bucket_date=parse_bucket_date(bucket_date),
+                    post_count=post_rows.get(bucket_date, 0),
+                    issue_count=issue_rows.get(bucket_date, 0),
+                )
+                for bucket_date in timeline_dates
+            ],
+            by_category=[
+                CountRead(
+                    key=row_category or "unknown",
+                    label=category_label(row_category or "unknown"),
+                    count=count,
+                )
+                for row_category, count in category_rows
+            ],
+            top_sources=[
+                SourceCountRead(
+                    source_id=row_id,
+                    label=label,
+                    platform=row_platform,
+                    count=count,
+                )
+                for row_id, label, row_platform, count in source_rows
+            ],
+            top_keywords=[
+                CountRead(key=keyword, label=keyword, count=count)
+                for keyword, count in keyword_counts.most_common(12)
+            ],
+            top_issues=[issue_read(cluster) for cluster in top_issues],
+        )
+
     return application
 
 
 def issue_has_item(
     language: str | None = None,
     source_id: int | None = None,
+    platform: str | None = None,
     search: str | None = None,
     full_text: bool = False,
 ):
@@ -368,6 +505,8 @@ def issue_has_item(
         query = query.where(CollectedItem.language == language)
     if source_id:
         query = query.where(CollectedItem.source_id == source_id)
+    if platform:
+        query = query.where(CollectedItem.platform == platform)
     if search:
         if full_text:
             query = query.where(
@@ -377,6 +516,17 @@ def issue_has_item(
             )
         else:
             query = query.where(CollectedItem.text.ilike(f"%{search}%"))
+    return exists(query)
+
+
+def item_has_issue(category: str | None = None):
+    query = (
+        select(IssueEvidence.id)
+        .join(IssueCluster, IssueCluster.id == IssueEvidence.cluster_id)
+        .where(IssueEvidence.item_id == CollectedItem.id)
+    )
+    if category:
+        query = query.where(IssueCluster.category == category)
     return exists(query)
 
 
@@ -399,6 +549,24 @@ def post_filters(
     return filters
 
 
+def analytics_post_filters(
+    platform: str | None = None,
+    language: str | None = None,
+    source_id: int | None = None,
+    category: str | None = None,
+    days: int = 30,
+):
+    filters = post_filters(
+        platform=platform,
+        language=language,
+        source_id=source_id,
+        days=days,
+    )
+    if category:
+        filters.append(item_has_issue(category=category))
+    return filters
+
+
 def issue_read(cluster: IssueCluster) -> IssueRead:
     topic = topic_for_key(cluster.fingerprint)
     return IssueRead(
@@ -412,6 +580,11 @@ def issue_read(cluster: IssueCluster) -> IssueRead:
         previous_count=cluster.previous_count,
         source_count=cluster.source_count,
         language_counts=cluster.language_counts or {},
+        keywords=cluster.keywords or [],
+        growth_rate=cluster.growth_rate or 0.0,
+        trend=cluster.trend or "stable",
+        confidence=cluster.confidence or 0.0,
+        total_count=cluster.total_count or 0,
     )
 
 
@@ -431,6 +604,22 @@ def post_read(item: CollectedItem, source: Source) -> PostRead:
 
 def language_label(value: str) -> str:
     return {"ar": "Arabic", "en": "English", "unknown": "Unknown"}.get(value, value)
+
+
+def category_label(value: str) -> str:
+    return {
+        "services": "الخدمات",
+        "prices": "الأسعار",
+        "work": "العمل والتصاريح",
+        "aid_food": "الغذاء والمساعدات",
+        "health": "الصحة",
+        "education": "التعليم",
+        "mobility": "التنقل",
+        "housing": "السكن",
+        "safety": "السلامة",
+        "other": "أخرى",
+        "unknown": "غير معروف",
+    }.get(value, value)
 
 
 def parse_bucket_date(value) -> date:

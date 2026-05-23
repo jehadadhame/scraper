@@ -5,7 +5,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 Platform = Literal["telegram", "discord", "facebook", "news"]
-RunKind = Literal["ingest", "discover", "retention"]
+RunKind = Literal["ingest", "discover", "retention", "analyze"]
 
 
 class SourceCreate(BaseModel):
@@ -101,6 +101,11 @@ class IssueRead(BaseModel):
     previous_count: int
     source_count: int
     language_counts: dict[str, int]
+    keywords: list[str]
+    growth_rate: float
+    trend: str
+    confidence: float
+    total_count: int
 
 
 class EvidenceRead(BaseModel):
@@ -157,3 +162,21 @@ class PostStatsRead(BaseModel):
     by_language: list[CountRead]
     top_sources: list[SourceCountRead]
     timeline: list[PostTimelineRead]
+
+
+class AnalyticsTimelineRead(BaseModel):
+    bucket_date: date
+    post_count: int
+    issue_count: int
+
+
+class AnalyticsStatsRead(BaseModel):
+    total_posts: int
+    analyzed_posts: int
+    issue_count: int
+    rising_issue_count: int
+    timeline: list[AnalyticsTimelineRead]
+    by_category: list[CountRead]
+    top_sources: list[SourceCountRead]
+    top_keywords: list[CountRead]
+    top_issues: list[IssueRead]

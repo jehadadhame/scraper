@@ -18,6 +18,9 @@ import {
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import {
   api,
+  AnalyticsFilters,
+  AnalyticsStats,
+  analyticsQuery,
   Candidate,
   Issue,
   IssueDetail,
@@ -52,10 +55,19 @@ const defaultPostFilters: PostFilters = {
   limit: "100",
 };
 
+const defaultAnalyticsFilters: AnalyticsFilters = {
+  category: "",
+  platform: "",
+  language: "",
+  sourceId: "",
+  days: "30",
+};
+
 const platforms: Platform[] = ["telegram", "discord", "facebook", "news"];
 const categories = [
   "services",
   "prices",
+  "work",
   "aid_food",
   "health",
   "education",
@@ -67,6 +79,7 @@ const categories = [
 const categoryLabels: Record<string, string> = {
   services: "الخدمات",
   prices: "الأسعار",
+  work: "العمل والتصاريح",
   aid_food: "الغذاء والمساعدات",
   health: "الصحة",
   education: "التعليم",
@@ -76,9 +89,9 @@ const categoryLabels: Record<string, string> = {
   other: "أخرى",
 };
 const languageLabels: Record<string, string> = {
-  ar: "Arabic",
-  en: "English",
-  unknown: "Unknown",
+  ar: "العربية",
+  en: "الإنجليزية",
+  unknown: "غير معروف",
 };
 
 export function App() {
@@ -90,8 +103,10 @@ export function App() {
   const [issueDetail, setIssueDetail] = useState<IssueDetail | null>(null);
   const [posts, setPosts] = useState<Post[]>([]);
   const [postStats, setPostStats] = useState<PostStats | null>(null);
+  const [analyticsStats, setAnalyticsStats] = useState<AnalyticsStats | null>(null);
   const [filters, setFilters] = useState(defaultFilters);
   const [postFilters, setPostFilters] = useState(defaultPostFilters);
+  const [analyticsFilters, setAnalyticsFilters] = useState(defaultAnalyticsFilters);
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
 
@@ -135,6 +150,14 @@ export function App() {
     }
   }, [postFilters]);
 
+  const loadAnalytics = useCallback(async () => {
+    try {
+      setAnalyticsStats(await api<AnalyticsStats>(analyticsQuery(analyticsFilters)));
+    } catch (nextError) {
+      setError(errorMessage(nextError));
+    }
+  }, [analyticsFilters]);
+
   useEffect(() => {
     void loadBase();
   }, [loadBase]);
@@ -147,14 +170,18 @@ export function App() {
     void loadPosts();
   }, [loadPosts]);
 
+  useEffect(() => {
+    void loadAnalytics();
+  }, [loadAnalytics]);
+
   async function refreshAll() {
     setBusy("refresh");
     setError("");
-    await Promise.all([loadBase(), loadIssues(), loadPosts()]);
+    await Promise.all([loadBase(), loadIssues(), loadPosts(), loadAnalytics()]);
     setBusy("");
   }
 
-  async function triggerRun(kind: Run["kind"]) {
+  async function triggerRun(kind: Run["kind"], nextView: View = "runs") {
     setBusy(kind);
     setError("");
     try {
@@ -163,7 +190,7 @@ export function App() {
         body: JSON.stringify({ kind }),
       });
       await loadBase();
-      setView("runs");
+      setView(nextView);
     } catch (nextError) {
       setError(errorMessage(nextError));
     } finally {
@@ -246,7 +273,8 @@ export function App() {
         </div>
         <nav className="tabs" aria-label="Dashboard views">
           <Tab view={view} value="issues" label="القضايا" onSelect={setView} icon={<Activity />} />
-          <Tab view={view} value="posts" label="Posts" onSelect={setView} icon={<BarChart3 />} />
+          <Tab view={view} value="analytics" label="التحليلات" onSelect={setView} icon={<BarChart3 />} />
+          <Tab view={view} value="posts" label="Posts" onSelect={setView} icon={<Newspaper />} />
           <Tab view={view} value="sources" label="Sources" onSelect={setView} icon={<DatabaseZap />} />
           <Tab view={view} value="discovery" label="Review" onSelect={setView} icon={<FileSearch />} />
           <Tab view={view} value="runs" label="Runs" onSelect={setView} icon={<Clock3 />} />
@@ -286,6 +314,16 @@ export function App() {
           onSelect={selectIssue}
         />
       ) : null}
+      {view === "analytics" ? (
+        <AnalyticsView
+          filters={analyticsFilters}
+          sources={sources}
+          stats={analyticsStats}
+          busy={busy}
+          onFilter={setAnalyticsFilters}
+          onAnalyze={() => void triggerRun("analyze", "analytics")}
+        />
+      ) : null}
       {view === "sources" ? (
         <SourcesView
           sources={sources}
@@ -310,6 +348,163 @@ export function App() {
       ) : null}
       {view === "runs" ? <RunsView runs={runs} onRetention={() => void triggerRun("retention")} /> : null}
     </main>
+  );
+}
+
+function AnalyticsView({
+  filters,
+  sources,
+  stats,
+  busy,
+  onFilter,
+  onAnalyze,
+}: {
+  filters: AnalyticsFilters;
+  sources: Source[];
+  stats: AnalyticsStats | null;
+  busy: string;
+  onFilter: (filters: AnalyticsFilters) => void;
+  onAnalyze: () => void;
+}) {
+  const timelinePeak = Math.max(...(stats?.timeline ?? []).map((point) => point.post_count), 1);
+  const analyzedRate = stats?.total_posts ? Math.round((stats.analyzed_posts / stats.total_posts) * 100) : 0;
+  const risingIssues = (stats?.top_issues ?? []).filter((issue) => ["new", "rising"].includes(issue.trend));
+  return (
+    <section className="analytics-view" dir="rtl">
+      <aside className="analytics-filters">
+        <h2><Filter /> فلاتر التحليلات</h2>
+        <label>
+          الفترة
+          <select value={filters.days} onChange={(event) => onFilter({ ...filters, days: event.target.value })}>
+            <option value="7">7 أيام</option>
+            <option value="14">14 يوما</option>
+            <option value="30">30 يوما</option>
+            <option value="90">90 يوما</option>
+          </select>
+        </label>
+        <label>
+          الفئة
+          <select value={filters.category} onChange={(event) => onFilter({ ...filters, category: event.target.value })}>
+            <option value="">الكل</option>
+            {categories.map((category) => <option key={category} value={category}>{categoryLabel(category)}</option>)}
+          </select>
+        </label>
+        <label>
+          المنصة
+          <select value={filters.platform} onChange={(event) => onFilter({ ...filters, platform: event.target.value })}>
+            <option value="">الكل</option>
+            {platforms.map((platform) => <option key={platform} value={platform}>{labelize(platform)}</option>)}
+          </select>
+        </label>
+        <label>
+          اللغة
+          <select value={filters.language} onChange={(event) => onFilter({ ...filters, language: event.target.value })}>
+            <option value="">الكل</option>
+            <option value="ar">العربية</option>
+            <option value="en">الإنجليزية</option>
+            <option value="unknown">غير معروف</option>
+          </select>
+        </label>
+        <label>
+          المصدر
+          <select value={filters.sourceId} onChange={(event) => onFilter({ ...filters, sourceId: event.target.value })}>
+            <option value="">الكل</option>
+            {sources.map((source) => <option key={source.id} value={source.id}>{source.label}</option>)}
+          </select>
+        </label>
+      </aside>
+
+      <section className="analytics-dashboard">
+        <header className="analytics-header">
+          <div>
+            <p>تحليل محلي بدون LLM</p>
+            <h1>الإشارات والاتجاهات</h1>
+            <span>{stats?.issue_count ?? 0} إشارة دقيقة من {stats?.analyzed_posts ?? 0} منشور محلل.</span>
+          </div>
+          <button className="command" disabled={busy === "analyze"} onClick={onAnalyze}>
+            <RefreshCcw /> إعادة بناء التحليلات
+          </button>
+        </header>
+
+        <section className="stats-grid analytics-summary" aria-label="Analytics summary">
+          <StatCard label="المنشورات" value={compactNumber(stats?.total_posts ?? 0)} />
+          <StatCard label="محللة" value={`${analyzedRate}%`} />
+          <StatCard label="الإشارات" value={compactNumber(stats?.issue_count ?? 0)} />
+          <StatCard label="صاعدة/جديدة" value={compactNumber(stats?.rising_issue_count ?? 0)} />
+        </section>
+
+        <section className="analytics-panels">
+          <div className="analytics-panel wide">
+            <h2>الحركة الزمنية</h2>
+            <section className="analytics-timeline">
+              {(stats?.timeline ?? []).map((point) => (
+                <div
+                  key={point.bucket_date}
+                  className="bar-slot"
+                  title={`${point.bucket_date}: ${point.post_count} منشورات، ${point.issue_count} إشارات`}
+                >
+                  <i style={{ height: `${Math.max((point.post_count / timelinePeak) * 100, 8)}%` }} />
+                  <span>{point.bucket_date.slice(5)}</span>
+                </div>
+              ))}
+              {!stats?.timeline.length ? <small>لا توجد منشورات في هذه الفترة</small> : null}
+            </section>
+          </div>
+
+          <div className="analytics-panel">
+            <h2>الإشارات الصاعدة</h2>
+            <section className="rank-list issue-rank-list">
+              {(risingIssues.length ? risingIssues : stats?.top_issues ?? []).slice(0, 6).map((issue) => (
+                <div key={issue.id}>
+                  <span>
+                    <b>{issue.label}</b>
+                    <small>{trendLabel(issue.trend)} · {issue.recent_count} حديث · ثقة {formatPercent(issue.confidence)}</small>
+                  </span>
+                  <strong>{issue.score.toFixed(1)}</strong>
+                </div>
+              ))}
+              {!stats?.top_issues.length ? <small>لا توجد إشارات بعد</small> : null}
+            </section>
+          </div>
+
+          <div className="analytics-panel">
+            <h2>توزيع الفئات</h2>
+            <section className="rank-list compact">
+              {(stats?.by_category ?? []).map((entry) => (
+                <div key={entry.key}>
+                  <span>{entry.label}</span>
+                  <strong>{compactNumber(entry.count)}</strong>
+                </div>
+              ))}
+              {!stats?.by_category.length ? <small>لا توجد فئات بعد</small> : null}
+            </section>
+          </div>
+
+          <div className="analytics-panel">
+            <h2>المصادر المؤثرة</h2>
+            <section className="rank-list">
+              {(stats?.top_sources ?? []).map((source) => (
+                <div key={source.source_id}>
+                  <span><b>{source.label}</b><small>{source.platform}</small></span>
+                  <strong>{compactNumber(source.count)}</strong>
+                </div>
+              ))}
+              {!stats?.top_sources.length ? <small>لا توجد مصادر بعد</small> : null}
+            </section>
+          </div>
+
+          <div className="analytics-panel wide">
+            <h2>الكلمات المفتاحية</h2>
+            <section className="keyword-cloud">
+              {(stats?.top_keywords ?? []).map((keyword) => (
+                <span key={keyword.key}>{keyword.label}<b>{compactNumber(keyword.count)}</b></span>
+              ))}
+              {!stats?.top_keywords.length ? <small>لا توجد كلمات مفتاحية بعد</small> : null}
+            </section>
+          </div>
+        </section>
+      </section>
+    </section>
   );
 }
 
@@ -974,6 +1169,19 @@ function postFilterChips(filters: PostFilters, selectedSource?: Source) {
 
 function postWindowLabel(value: string) {
   return { "1": "24 hours", "7": "7 days", "30": "30 days", "90": "90 days" }[value] ?? `${value} days`;
+}
+
+function trendLabel(value: string) {
+  return {
+    new: "جديدة",
+    rising: "صاعدة",
+    stable: "مستقرة",
+    falling: "متراجعة",
+  }[value] ?? labelize(value);
+}
+
+function formatPercent(value: number) {
+  return `${Math.round(value * 100)}%`;
 }
 
 function compactNumber(value: number) {

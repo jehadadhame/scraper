@@ -259,6 +259,7 @@ select {
 .issue-list,
 .detail-pane,
 .source-table,
+.analytics-dashboard,
 .post-dashboard,
 .post-list,
 .candidate-list,
@@ -425,6 +426,131 @@ dd {
 .evidence-row a {
   color: #0d503e;
   display: inline-flex;
+}
+
+.analytics-view {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: minmax(210px, 270px) minmax(0, 1fr);
+}
+
+.analytics-filters {
+  align-content: start;
+  border-left: 1px solid #c9d4ce;
+  display: grid;
+  gap: 13px;
+  padding-left: 16px;
+  position: sticky;
+  top: 14px;
+}
+
+.analytics-dashboard {
+  display: grid;
+  gap: 14px;
+}
+
+.analytics-header {
+  align-items: center;
+  border-bottom: 1px solid #c9d4ce;
+  display: flex;
+  gap: 14px;
+  justify-content: space-between;
+  min-height: 78px;
+  padding-bottom: 12px;
+}
+
+.analytics-header div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.analytics-header p {
+  color: #a62d3c;
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.analytics-header h1 {
+  color: #071b18;
+  font-size: 1.5rem;
+  line-height: 1.15;
+}
+
+.analytics-header span {
+  color: #5c645e;
+}
+
+.analytics-summary .stat-card:nth-child(2) {
+  border-top-color: #c98514;
+}
+
+.analytics-summary .stat-card:nth-child(4) {
+  border-top-color: #a62d3c;
+}
+
+.analytics-panels {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.analytics-panel {
+  background: #f7faf8;
+  border: 1px solid #d4ded8;
+  border-radius: 7px;
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px;
+}
+
+.analytics-panel.wide {
+  grid-column: span 2;
+}
+
+.analytics-timeline {
+  align-items: end;
+  border-bottom: 1px solid #b7c4bc;
+  display: flex;
+  gap: 6px;
+  height: 160px;
+  overflow-x: auto;
+  padding-bottom: 6px;
+}
+
+.analytics-timeline small,
+.keyword-cloud small {
+  align-self: center;
+  color: #657169;
+}
+
+.issue-rank-list div {
+  align-items: start;
+}
+
+.keyword-cloud {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.keyword-cloud span {
+  align-items: center;
+  background: #e3ece7;
+  border: 1px solid #b7c4bc;
+  border-radius: 999px;
+  display: inline-flex;
+  gap: 7px;
+  min-height: 34px;
+  padding: 0 11px;
+}
+
+.keyword-cloud b {
+  color: #0d503e;
+  font-size: 0.82rem;
 }
 
 .posts-view {
@@ -863,12 +989,15 @@ dd {
 
   .issues-workspace,
   .sources-workspace,
+  .analytics-view,
+  .analytics-panels,
   .posts-view,
   .post-stat-panels {
     grid-template-columns: 1fr;
   }
 
   .filter-rail,
+  .analytics-filters,
   .post-filters,
   .source-form,
   .detail-pane {
@@ -880,12 +1009,24 @@ dd {
     position: static;
   }
 
+  .analytics-filters {
+    position: static;
+  }
+
   .filter-rail {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .post-filters {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .analytics-filters {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .analytics-panel.wide {
+    grid-column: span 1;
   }
 
   .detail-pane {
@@ -912,6 +1053,7 @@ dd {
 
   .source-strip,
   .filter-rail,
+  .analytics-filters,
   .post-filters,
   .stats-grid {
     grid-template-columns: 1fr 1fr;
@@ -935,6 +1077,7 @@ dd {
     grid-template-columns: 1fr;
   }
 
+  .analytics-header,
   .post-view-header {
     align-items: stretch;
     flex-direction: column;

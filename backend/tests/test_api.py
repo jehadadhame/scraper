@@ -1,3 +1,4 @@
+import asyncio
 from collections.abc import Generator
 from datetime import UTC, datetime, timedelta
 
@@ -9,8 +10,8 @@ from sqlalchemy.pool import StaticPool
 from app.connectors.base import CollectedRecord
 from app.db import get_session, init_db
 from app.main import create_app
-from app.models import DiscoveryCandidate, Source
-from app.services.ingestion import store_item
+from app.models import DiscoveryCandidate, IngestionRun, IssueCluster, Source
+from app.services.ingestion import execute_run, store_item
 
 
 def test_source_crud_and_candidate_review() -> None:
@@ -119,3 +120,56 @@ def test_post_list_and_stats_filters() -> None:
     assert stats["last_7d"] == 2
     assert stats["by_platform"][0]["count"] >= 1
     assert {entry["label"] for entry in stats["by_language"]} == {"Arabic", "English"}
+
+
+def test_analytics_endpoint_and_analyze_run() -> None:
+    engine = create_engine(
+        "sqlite+pysqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    init_db(engine)
+    testing_session = sessionmaker(bind=engine, expire_on_commit=False)
+    app = create_app(initialize_database=False)
+
+    def session_override() -> Generator[Session, None, None]:
+        with testing_session() as session:
+            yield session
+
+    app.dependency_overrides[get_session] = session_override
+    now = datetime.now(UTC)
+    with testing_session() as session:
+        source = Source(platform="telegram", label="Workers", external_id="workers")
+        session.add(source)
+        session.flush()
+        for index, text in enumerate(
+            [
+                "تصاريح العمل للعمال متوقفة وهناك حاجة لمتابعة عاجلة",
+                "العمال يطالبون بحل مشكلة تصاريح العمل",
+                "نقص ادوية في العيادة وحاجة لدعم صحي",
+            ]
+        ):
+            store_item(
+                session,
+                source,
+                CollectedRecord(
+                    platform="telegram",
+                    external_id=f"w{index}",
+                    text=text,
+                    posted_at=now - timedelta(hours=index),
+                ),
+            )
+        run = IngestionRun(kind="analyze", trigger="manual", status="queued")
+        session.add(run)
+        session.commit()
+        asyncio.run(execute_run(session, run))
+        assert session.query(IssueCluster).count() >= 2
+
+    client = TestClient(app)
+    stats = client.get("/api/analytics", params={"days": 30}).json()
+
+    assert stats["total_posts"] == 3
+    assert stats["analyzed_posts"] == 3
+    assert stats["issue_count"] >= 2
+    assert stats["top_keywords"]
+    assert stats["top_issues"][0]["keywords"]

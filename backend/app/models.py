@@ -135,6 +135,11 @@ class IssueCluster(Base):
     previous_count: Mapped[int] = mapped_column(Integer, default=0)
     source_count: Mapped[int] = mapped_column(Integer, default=0)
     language_counts: Mapped[dict[str, int]] = mapped_column(JSON, default=dict)
+    keywords: Mapped[list[str]] = mapped_column(JSON, default=list)
+    growth_rate: Mapped[float] = mapped_column(Float, default=0.0)
+    trend: Mapped[str] = mapped_column(String(32), default="stable", index=True)
+    confidence: Mapped[float] = mapped_column(Float, default=0.0)
+    total_count: Mapped[int] = mapped_column(Integer, default=0)
     embedding: Mapped[list[float] | None] = mapped_column(Vector(384))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(

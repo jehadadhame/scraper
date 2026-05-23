@@ -1,5 +1,5 @@
 export type Platform = "telegram" | "discord" | "facebook" | "news";
-export type View = "issues" | "posts" | "sources" | "discovery" | "runs";
+export type View = "issues" | "analytics" | "posts" | "sources" | "discovery" | "runs";
 
 export interface Source {
   id: number;
@@ -33,7 +33,7 @@ export interface Candidate {
 
 export interface Run {
   id: number;
-  kind: "ingest" | "discover" | "retention";
+  kind: "ingest" | "discover" | "retention" | "analyze";
   trigger: string;
   status: string;
   requested_at: string;
@@ -57,6 +57,11 @@ export interface Issue {
   previous_count: number;
   source_count: number;
   language_counts: Record<string, number>;
+  keywords: string[];
+  growth_rate: number;
+  trend: string;
+  confidence: number;
+  total_count: number;
 }
 
 export interface Evidence {
@@ -139,6 +144,32 @@ export interface PostFilters {
   limit: string;
 }
 
+export interface AnalyticsTimelinePoint {
+  bucket_date: string;
+  post_count: number;
+  issue_count: number;
+}
+
+export interface AnalyticsStats {
+  total_posts: number;
+  analyzed_posts: number;
+  issue_count: number;
+  rising_issue_count: number;
+  timeline: AnalyticsTimelinePoint[];
+  by_category: Count[];
+  top_sources: SourceCount[];
+  top_keywords: Count[];
+  top_issues: Issue[];
+}
+
+export interface AnalyticsFilters {
+  category: string;
+  platform: string;
+  language: string;
+  sourceId: string;
+  days: string;
+}
+
 const apiRoot = import.meta.env.VITE_API_URL ?? "http://127.0.0.1:8000/api";
 
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {
@@ -185,6 +216,21 @@ export function postQuery(filters: PostFilters): string {
 export function postStatsQuery(filters: PostFilters): string {
   const query = postParams(filters).toString();
   return `/posts/stats${query ? `?${query}` : ""}`;
+}
+
+export function analyticsQuery(filters: AnalyticsFilters): string {
+  const params = new URLSearchParams();
+  Object.entries({
+    category: filters.category,
+    platform: filters.platform,
+    language: filters.language,
+    days: filters.days,
+    source_id: filters.sourceId,
+  }).forEach(([key, value]) => {
+    if (value) params.set(key, value);
+  });
+  const query = params.toString();
+  return `/analytics${query ? `?${query}` : ""}`;
 }
 
 function postParams(filters: PostFilters): URLSearchParams {
