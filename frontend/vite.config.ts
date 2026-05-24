@@ -5,7 +5,7 @@ export default defineConfig({
 
   plugins: [react()],
   server: {
-    allowedHosts: ["e-mall.site", "feed.e-mall.site"],
+    allowedHosts: ["e-mall.site", "e-mall.store", "feed.e-mall.site", "feed.e-mall.store"],
     host: "127.0.0.1",
     port: 5173,
   },
